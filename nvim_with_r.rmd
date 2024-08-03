@@ -1,0 +1,228 @@
+[Home](https://alex-n.xyz/)
+
+# Tutorial: Replace RStudio and TexStudio with Neovim on Linux
+
+This tutorial shows you how to use the [Nvim-R plugin](https://github.com/jalvesaq/Nvim-R) and LaTeX compilation within Neovim, covering all the steps required to get R working from a fresh Fedora Linux install. Using Neovim as your R IDE is a lot easier than many tutorials on the internet make it seem. In fact, I wasn't able to find an easy to follow tutorial that still worked so I thought I would write my own now that I have figured it out for myself. 
+
+I have found that R in Neovim runs faster than in RStudio while doing a replication for a paper which required running a clustered bootstrap. This specific bootstrap ran ~10% faster in Neovim than in RStudio (I'm not sure why, but feel free to reach out and let me know whats going on). A Neovim R + LaTeX combo is also super flexible, allowing you to work on R files and LaTex files side by side, in a single window, without requiring the installation of RStudio and TexStudio (a classic combo).
+
+Again, I am using Linux (Fedora 40) and **this tutorial is aimed at Fedora users**. I cannot guarantee that the steps in this article will work for Windows, Mac or non-Fedora Linux users). 
+
+## System and package requirements for this tutorial 
+
+To start, install Neovim. In Fedora you can do this from your package manager. 
+
+```{r, eval = F}
+sudo dnf install neovim 
+```
+
+The version of neovim packaged with Ubuntu 22.02 LTS will NOT work for this tutorial. I suggest you use the Neovim AppImage instead if you are using a more conservative package manager. To do so, download the AppImage from [here](https://github.com/neovim/neovim-releases/releases). Then I would create an alias so the "nvim" command is associated with the AppImage. I use a fish shell (this will look different if you use a bash shell).
+
+```{r, eval=F}
+alias --save nvim="~/Documents/0default/nvim.appimage"
+```
+
+Replace the path above with the one you store your downloaded AppImage in. 
+
+Next, we need to install some dependencies. These were not included in my Fedora installation, but may be included in your Linux distribution. These should all be included in your distributions repository. If you are unsure what these packages do, I encourage you to research them before installing.
+
+```{r, eval = F}
+sudo dnf install zsh git python3 python3-pip latexmk pandoc default-jdk biber ripgrep cargo
+
+cargo install tree-sitter-cli
+```
+
+Finally, we install R. You should follow the tutorial for your distribution on *https://cran.r-project.org/*.
+
+## Setting up your vimrc file
+Your vimrc file (also known as the init.vim or init.lua file) allows you to customize your Neovim editor and install the required plug-ins to get Nvim-R up and running. This file also does many other things that I won't cover in this tutorial, but are covered extensively in forums and blog posts.  
+
+To find out where this file is, open Neovim and run the following:
+
+```{r, eval = F}
+# Open Neovim by opening a new terminal window and entering the following command:
+nvim 
+
+# Within Neovim, press ":" and enter the following command
+:echo $MYVIMRC
+```
+Mine shows ~/.config/nvim/init.vim. If you haven't set up a vimrc file, you can create it by running the following commands:
+
+```{r, eval = F}
+# Exit Neovim with :q and enter the following in your terminal:
+cd ~/.config
+
+# Check if you have an nvim folder already:
+ls 
+
+# If you do NOT have an nvim folder, create it 
+mkdir nvim 
+
+# And then create the init.vim file 
+touch init.vim
+```
+## Installing the required plugins 
+
+First we need to install a plug-in manager for Neovim. As the name suggests, this program will allow for the installation of Neovim plugins that are published on GitHub. I use [vim-plug](https://github.com/junegunn/vim-plug). Follow the instructions on the page to install vim-plug. 
+
+Once you have installed vim-plug, you can install the required plugins to use R and LaTeX in Neovim. The following snippet from my vimrc is the bare minimum you need to ensure that R and LaTeX work in Neovim. I do not use the newer R.nvim plugin, which is recommended for Neovim users, since that plugin is still quite buggy for me. If this changes I will make sure to update this tutorial.  
+
+```{r, eval = F, highlight = F}
+syntax enable
+
+call plug#begin('~/.vim/plugged')
+Plug 'jalvesaq/Nvim-R'
+Plug 'R-nvim/cmp-r'
+Plug 'neovim/nvim-lspconfig'
+Plug 'hrsh7th/cmp-nvim-lsp'
+Plug 'hrsh7th/cmp-buffer'
+Plug 'hrsh7th/cmp-path'
+Plug 'hrsh7th/cmp-cmdline'
+Plug 'hrsh7th/nvim-cmp'
+Plug 'nvim-treesitter/nvim-treesitter'
+Plug 'hrsh7th/cmp-vsnip'
+Plug 'hrsh7th/vim-vsnip'
+Plug 'lervag/vimtex'
+call plug#end()
+
+" CMP Setup "
+lua <<EOF
+  -- Set up nvim-cmp.
+  local cmp = require'cmp'
+
+  cmp.setup({
+    snippet = {
+      -- REQUIRED - you must specify a snippet engine
+      expand = function(args)
+        vim.fn["vsnip#anonymous"](args.body) -- For `vsnip` users.
+        -- require('luasnip').lsp_expand(args.body) -- For `luasnip` users.
+        -- require('snippy').expand_snippet(args.body) -- For `snippy` users.
+        -- vim.fn["UltiSnips#Anon"](args.body) -- For `ultisnips` users.
+        -- vim.snippet.expand(args.body) -- For native neovim snippets (Neovim v0.10+)
+      end,
+    },
+    window = {
+      -- completion = cmp.config.window.bordered(),
+      -- documentation = cmp.config.window.bordered(),
+    },
+    mapping = cmp.mapping.preset.insert({
+      ['<C-b>'] = cmp.mapping.scroll_docs(-4),
+      ['<C-f>'] = cmp.mapping.scroll_docs(4),
+      ['<C-Space>'] = cmp.mapping.complete(),
+      ['<C-e>'] = cmp.mapping.abort(),
+      ['<CR>'] = cmp.mapping.confirm({ select = true }), -- Accept currently selected item. Set `select` to `false` to only confirm explicitly selected items.
+    }),
+    sources = cmp.config.sources({
+      { name = 'nvim_lsp' },
+      { name = 'vsnip' }, -- For vsnip users.
+      -- { name = 'luasnip' }, -- For luasnip users.
+      -- { name = 'ultisnips' }, -- For ultisnips users.
+      -- { name = 'snippy' }, -- For snippy users.
+    }, {
+      { name = 'buffer' },
+    })
+  })
+
+  -- Set configuration for specific filetype.
+  cmp.setup.filetype('gitcommit', {
+    sources = cmp.config.sources({
+      { name = 'git' }, -- You can specify the `git` source if [you were installed it](https://github.com/petertriho/cmp-git).
+    }, {
+      { name = 'buffer' },
+    })
+  })
+
+  -- Use buffer source for `/` and `?` (if you enabled `native_menu`, this won't work anymore).
+  cmp.setup.cmdline({ '/', '?' }, {
+    mapping = cmp.mapping.preset.cmdline(),
+    sources = {
+      { name = 'buffer' }
+    }
+  })
+
+  -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
+  cmp.setup.cmdline(':', {
+    mapping = cmp.mapping.preset.cmdline(),
+    sources = cmp.config.sources({
+      { name = 'path' }
+    }, {
+      { name = 'cmdline' }
+    }),
+    matching = { disallow_symbol_nonprefix_matching = false }
+  })
+
+  -- Set up lspconfig.
+  local capabilities = require('cmp_nvim_lsp').default_capabilities()
+  -- Replace <YOUR_LSP_SERVER> with each lsp server you've enabled.
+  require('lspconfig')['r_language_server'].setup {
+    capabilities = capabilities
+  }
+
+--  vim.diagnostic.config({ virtual_text = false })
+   vim.diagnostic.disable()
+EOF
+
+" Nvim-R adjustments " 
+let R_assign = 0
+
+" LaTeX Compilation "
+au FileType tex nmap <leader>ll <Plug>Tex_Compile
+au FileType tex nmap <leader>lv <Plug>Tex_View
+```
+
+I added a couple of small adjustments in this vimrc snippet that alter the functionality of Nvim-R plugin and LaTeX in Neovim. First, the default shortcut for 'assignment' in Nvim-R is 'Shift + _ ', which is highly annoying if you use underscores in your variable names. I've turned this off with 'let R_assign = 0'. I've also added two shortcuts for LaTeX compilation, <leader>ll and <leader>lv. <leader>ll will turn on auto-compilation for LaTeX files and <leader>lv will pull up the compiled PDF. My <leader> key is \, which is the standard. 
+
+Once you have copied the configuration above, save your vimrc file and exit Neovim. **I encourage you to review all the plug-ins you decide to use in Neovim**. This might be common sense for some, but I often see people load 50+ plug-ins, which is a security risk. 
+
+Open Neovim again and run the following command within Neovim:
+
+```{r, eval = F}
+:PlugInstall
+```
+
+This command will start the installation of all the plug-ins we have included above. You should see the progress of each of the plug-ins installation after running this command. Once all installations are complete, you can quit Neovim again. 
+
+## Installing dependencies
+We are almost ready to use R in Neovim. Next, we need to start R from our terminal to install the R languageserver package which will allow R code completion within Neovim. 
+
+```{r, eval = F}
+# Open R in your terminal
+R 
+
+# Once you are inside R, run the following:
+install.packages("languageserver")
+
+# Let that install and then quit R 
+q() 
+```
+
+Next, we install some dependencies required for the Nvim-R plugin to run properly with TreeSitter. From terminal, run the following: 
+
+```{r, eval = F}
+pip3 install pynvim
+```
+
+Then open Neovim again, and run the following command from within Neovim:
+
+```{r, eval = F}
+:TSInstall r
+```
+
+## The finishing touches 
+Lets create our first R file together. There are some quirks the first time you run R in Neovim. 
+
+In Neovim, enter insert mode and copy the following R code (feel free to get creative and write your own sample code)
+
+```{r, eval = F}
+test_vector = c(1:100) 
+```
+
+Save this file by executing the following command in Neovim (feel free to delete this file after we are done): 
+
+```{r, eval = F}
+:w ~/sample_file.R
+```
+
+Once saved, start R by using the shortcut \rf. You may or may not get a couple of warnings about various things, I just ignore these. You should notice the Nvim-R is installing the nvimcom package, along with a couple other packages. Once this is installed you should be able to run the line of R code we wrote using \d. There are a ton of shortcuts for running R code using Nvim-R, these are all outlined in the GitHub repository. 
+
+You are now ready to use R in Neovim! 

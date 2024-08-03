@@ -1,0 +1,126 @@
+# [Home](https://alex-n.xyz/)
+
+## Fedora Linux on the Razer Blade
+I bought my Razer Blade 14 2023 in July 2023, and have been using Linux on it since January 2024. 
+
+Why I installed Linux:
+
+- Synapse is very annoying
+- Windows is very slow for me 
+- Linux is fun to use and learn
+- Proton has made gaming on Linux pretty good
+
+I've written up a guide below that definitely works with GNOME Fedora 40 as your distro. I cannot tell you how well these steps work with other distributions. I have also used TuxedoOS, which works pretty well if you do not require up to date packages. I recommend you use Fedora if you intend on following this tutorial, as a couple steps are Fedora specific. 
+
+### Installing Fedora
+
+### Step 1 - Basic Fedora Installation.
+
+This is a Razer Blade specific tutorial, so I will be skipping the basic steps like creating a Linux ISO. Most Linux installation tutorials online will show you how to install Fedora on your laptop. However, many of them don't encrypt their drive during installation, which I would recommend. You can follow [this](https://youtu.be/uPFsPeMHP9w) tutorial, but make sure that when you get to minute 10:05, that you also tick the "Encrypt my drive box" and set a strong password. 
+
+### Step 2 - Immediate Post Installation
+
+Once you have finished the installation make sure to update all packages. 
+```{r, eval = F}
+sudo dnf update
+```
+
+### Step 3 - Installing Required Drivers
+
+#### Point A - Installing NVIDIA Drivers (With Secure Boot Enabled)
+
+Now that we have Fedora installed, lets first install the NVidia drivers as this is, after all, a gaming laptop. I highly recommend that you sign the NVidia drivers so we can enable secure boot again. To do so, we need to execute the following steps (I modified the steps authored by Andrei Nevedomskii, who wrote about it [here](https://blog.monosoul.dev/2022/05/17/automatically-sign-nvidia-kernel-module-in-fedora-36/). **Make sure you have secure boot enabled. If you have never disabled secure boot, it should be enabled by default.** Next, follow the steps below:
+
+```{r, eval = F}
+# First we install the required packages for the signing of the NVidia drivers. 
+sudo dnf install kmodtool akmods mokutil openssl
+
+# Then we generate a signing key. 
+sudo kmodgenca -a 
+
+# Then we initiate the key enrolment 
+sudo mokutil --import /etc/pki/akmods/certs/public_key.der 
+
+# You will be asked to set a password. Just enter whatever, this doesn't have to be super secure. 
+
+# Now we reboot. At this point we will enrol the key with the mokutil GUI 
+sudo reboot
+```
+
+Execute the following steps in the mokutil GUI (the blue screen that pops up after rebooting):
+
+1. Select "Enroll MOK"
+2. Select "Continue" 
+3. Select "Yes" and enter the password you set in the previous step
+4. Select "Reboot"
+
+Your computer should reboot again. We can now install the NVidia drivers: 
+
+```{r, eval = F}
+sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda 
+```
+
+That's it! The NVidia settings program should be installed. You should be able to launch Steam using your discrete graphics card, and the NVidia settings app should have been automatically installed. Once this is all done, reboot your computer. Once rebooted, open the settings app, navigate to "System" on the left toolbar, and open "About". In "About", click on "System Details". You should now see that your NVidia card is recognized by name under the heading "Graphics 1" or something similar. Staying in Settings, you can check if secure boot is properly functioning. To do so, head to "Privacy & Security" in the left hand side toolbar. You should see a green lock at the top labeled "Secure Boot Active". 
+
+#### Point B - Other Recommended Installations
+
+There are a couple of packages that are not installed on Fedora by default, but that I highly recommend installing. These are outlined below: 
+
+##### Packages available in Fedora repositories
+```{r, eval = F}
+sudo dnf install @Multimedia nvtop alsa-tools fish git
+```
+
+The Multimedia group is useful for watching videos in Firefox. Nvtop is a terminal program that allows you to monitor the usage of your NVidia card (I prefer this program to NVidia's own). Finally, fish is used for auto complete functionality within the terminal. To make sure that fish is automatically run when you open the terminal, you need to set it as the shell. This can be done by running the following line in the terminal: 
+
+```{r, eval = F}
+chsh -s $(which fish)
+```
+
+After rebooting, fish should be the default shell of your terminal. If you want to learn more about fish, make sure to check the documentation. 
+
+I also **highly** recommend installing auto-cpufreq to get good battery life out of your laptop. To do this, following the instructions on the auto-cpufreq [GitHub page](https://github.com/AdnanHodzic/auto-cpufreq). Once you have followed the installation guide on the GitHub page, just make sure to run the following line of code in your terminal to enable auto-cpufreq: 
+
+```{r, eval = F}
+sudo auto-cpufreq --install
+```
+
+This will make sure that auto-cpufreq replaces the gnome power saving profiles. I increased my battery life from ~2 hours to ~7 hours using just auto-cpufreq. To further improve your battery life you can set your display refresh rate to 60Hz in the settings app.
+
+### Step 4 - Creating a Windows 11 VM 
+
+Windows 11 is more dificult to virtualize than Windows 10 due to TPM requirements. I have found it easiest to virtualize using virt-manager:
+
+```{r, eval = F}
+# Install the required packages 
+sudo dnf install virt-manager qemu qemu-kvm 
+
+# Reboot 
+reboot 
+```
+
+Now you can install the VM, you need to wait for virt-manager to initialize the first time you run it. Once the VM is installed, install the spice-tools binaries from here: https://www.spice-space.org/download.html. This will allow you to change the resolution of the VM. 
+
+# Conclusion
+
+And that's it! If you are interested in having Synapse like features on your newer Razer Blade, I recommend installing razer-laptop-control, although this isn't a strict requirement. I get full usage of my GPU and CPU in games as required without installing a synapse alternative. 
+
+### Troubleshooting 1: Getting sound to work 
+
+**Update: my sound now works without the need for this script**. Some genius at the Razer Linux Discord managed to get sound to work on the more modern Razer Blade laptops. If you haven't already, you need to install alsa-tools to get this fix to work:
+
+```{r, eval = F}
+sudo dnf install alsa-tools 
+```
+
+Once you have done that, you need the run [this](https://github.com/matchbook-o/razer-blade-sound/blob/main/RB14_2023_enable_internal_speakers_ver3.sh) script jamir from the [Razer Linux](https://discord.gg/FMU6YCWrXP) discord chat wrote. Download the linked script, and save it in your Documents folder. Then run the following from your terminal: 
+
+```{r, eval = F}
+# First we need to make the script executable
+sudo chmod +x ~/Documents/RB14_2023_enable_internal_speakers_ver3.sh
+
+# Then we run the script
+sudo sh ~/Documents/RB14_2023_enable_internal_speakers_ver3.sh
+```
+
+You may need to run this script at each startup (this can be automated).
